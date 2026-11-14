@@ -1,0 +1,19 @@
+name = "config-hub"
+main = "src/index.js"
+compatibility_date = "2026-11-13"
+
+[assets]
+directory = "./public"
+# 静态管理界面直接由 Cloudflare 静态资产分发，API 和 /file 路径由 Worker 处理。
+
+[vars]
+# 请复制此文件为 wrangler.dev.toml 或在本地 .dev.vars 中覆盖。
+# 敏感信息（仓库名、Token）请勿提交到公共仓库。
+GITHUB_OWNER = "YOUR_GITHUB_OWNER"
+GITHUB_REPO = "YOUR_GITHUB_REPO"
+GITHUB_BRANCH = "main"
+ROOT_DIR = ""
+# 公开仓库设为 true；私有仓库设为 false（Worker 代理会带 PAT）。
+PUBLIC_FILES = "true"
+# Worker 可变化分支链接缓存时间（秒）。
+CACHE_TTL = "60"

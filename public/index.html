@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="color-scheme" content="light" />
+  <title>GitHub Config Hub · 配置管理</title>
+  <link rel="stylesheet" href="/style.css" />
+  <!-- highlight.js 11.10.0（本地文件，避免 CDN 加载失败） -->
+  <link rel="stylesheet" href="/highlight-github.css" />
+  <script src="/highlight.min.js"></script>
+  <script src="/visual-editors.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <section id="loginView" class="login-shell">
+    <div class="login-card">
+      <div class="brand-mark">{ }</div>
+      <p class="overline">GITHUB CONFIG HUB</p>
+      <h1>集中管理配置文件</h1>
+      <p class="muted intro">通过 Cloudflare Worker 安全编辑 GitHub 文件，并生成可复制的直连和 CDN 链接。</p>
+      <form id="loginForm">
+        <label for="tokenInput">管理口令（ADMIN_TOKEN）</label>
+        <input id="tokenInput" type="password" placeholder="输入 Worker 管理口令" required autocomplete="off" />
+        <label class="check-line"><input id="rememberInput" type="checkbox" /> 在本次浏览器标签页内保留登录</label>
+        <button id="loginButton" class="btn primary full" type="submit">进入管理后台 <span>→</span></button>
+      </form>
+      <p class="hint">口令仅用于向当前 Worker 请求 API，不会传给 GitHub 或公开链接。</p>
+    </div>
+    <p class="login-foot">Powered by Cloudflare Workers · GitHub API</p>
+  </section>
+
+  <div id="appView" class="app" hidden>
+    <header class="topbar">
+      <div class="brand"><div class="brand-mark small">{ }</div><div><strong>Config Hub</strong><small>Github 配置文件管理</small></div></div>
+      <div class="top-actions"><span id="repoBadge" class="repo-badge">—</span><button class="btn ghost" id="parseBtn">链接解析</button><button class="btn ghost" id="refreshBtn">⟳ 刷新</button><button class="btn ghost" id="logoutBtn">退出</button></div>
+    </header>
+    <div class="workspace">
+      <aside class="sidebar">
+        <div class="side-heading"><div><p class="overline">REPOSITORY</p><h2 id="repoName">—</h2><p id="branchLabel" class="muted small-text">—</p></div></div>
+        <div class="side-actions"><button id="newBtn" class="btn primary">＋ 新建文件</button><button id="uploadBtn" class="btn secondary">↑ 上传</button><input id="uploadInput" type="file" hidden /></div>
+        <label for="searchInput" class="visually-hidden">搜索文件</label>
+        <input id="searchInput" class="search" placeholder="⌕ 搜索文件或目录..." />
+        <div class="list-header"><span>文件资源管理器</span><span id="fileCount">0 个文件</span></div>
+        <nav id="fileList" class="file-list" aria-label="仓库文件"></nav>
+        <div class="sidebar-note"><span class="dot"></span><span id="repoVisibility">正在检查仓库...</span></div>
+      </aside>
+      <main class="main-panel">
+        <section id="emptyState" class="empty-state"><div class="empty-icon">⌁</div><h2>选择文件开始管理</h2><p>从左侧浏览配置文件，或新建一个 YAML / JSON / TXT 文件。</p></section>
+        <section id="editorPanel" class="editor-panel" hidden>
+          <div class="editor-top"><div class="editor-title"><p class="overline">CURRENT FILE</p><h2 id="currentPath">—</h2><div class="meta-row"><span id="sizeLabel">—</span><span id="shaLabel">—</span><span id="dirtyLabel" class="dirty" hidden>● 未保存</span></div></div><div class="editor-actions"><button id="downloadBtn" class="btn secondary">下载</button><button id="deleteBtn" class="btn danger-outline">删除</button><button id="saveBtn" class="btn primary">保存到 GitHub</button></div></div>
+          <div class="editor-box">
+            <div class="editor-strip">
+              <span>文件内容</span>
+              <div class="editor-modes">
+                <button class="mode-btn active" data-mode="text" type="button">纯文本</button>
+                <button class="mode-btn" data-mode="highlight" type="button" hidden>语法高亮</button>
+                <button class="mode-btn" data-mode="visual" type="button" hidden>可视化</button>
+              </div>
+              <span id="encodingLabel">UTF-8</span>
+            </div>
+            <textarea id="editor" spellcheck="false" placeholder="在此输入配置内容..."></textarea>
+            <div id="highlightViewer" class="highlight-viewer" hidden>
+              <div id="highlightBar" class="highlight-bar"></div>
+              <pre><code id="highlightCode"></code></pre>
+            </div>
+            <div id="binaryNotice" class="binary-notice" hidden>二进制内容不能在线编辑，请下载后修改再上传。</div>
+            <!-- 可视化面板容器，由 app.js 动态填充 -->
+            <div id="visualPanel" class="visual-panel" hidden></div>
+          </div>
+          <div class="links-heading"><div><p class="overline">FILE DELIVERY</p><h3>文件访问链接</h3></div><span class="badge">一键复制</span></div>
+          <div id="publicWarning" class="notice" hidden></div>
+          <div id="linkList" class="link-list"></div>
+          <p class="footnote">分支 CDN 链接可能存在缓存延迟；需要立即获取特定文件版本时，使用固定 Commit 版本链接。</p>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
