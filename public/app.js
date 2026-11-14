@@ -97,8 +97,8 @@ async function request(url, method = 'GET', body) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401) {
-      // 管理接口返回 401 → 清 token 跳登录页（公开接口如 /api/info 不带 token 时 401 是正常的）
-      if (state.token) { logout(false); }
+      // 后端 /api/info 不鉴权，永远 200；所以 401 只可能来自需要 admin 的管理接口 → 一律跳登录页
+      logout(false);
       throw new Error(data.error || '需要登录');
     }
     throw new Error(data.error || `请求失败 (HTTP ${res.status})`);
@@ -114,7 +114,7 @@ async function login(token) {
   state.token = token;
   const info = await request('/api/info');
   state.info = info;
-  if (state.remember) sessionStorage.setItem('cfhub-token', token);
+  if (state.remember) localStorage.setItem('cfhub-token', token);
 
   $('loginView').hidden = true;
   $('appView').hidden = false;
@@ -135,6 +135,7 @@ function logout(show = true) {
   state.token = '';
   state.current = null;
   state.parsed = null;
+  localStorage.removeItem('cfhub-token');
   sessionStorage.removeItem('cfhub-token');
   $('appView').hidden = true;
   $('loginView').hidden = false;
@@ -146,10 +147,10 @@ function logout(show = true) {
 function updateRepoHeader(info) {
   $('repoName').textContent = `${info.owner}/${info.repo}`;
   $('repoBadge').textContent = `${info.owner}/${info.repo} · ${info.branch}`;
-  $('branchLabel').textContent = `分支: ${info.branch}${info.root ? ' · 目录: /' + info.root : ' · 整个仓库'}`;
-  const privText = info.private === null ? '（无 PAT，未知是否私有）'
-    : info.private ? '私有仓库（Worker 代理带 PAT；其他直连不可用）'
-    : '公开仓库（所有链接可分发）';
+  $('branchLabel').textContent = `分支: ${info.branch}${info.root ? ' · 目录: /' + info.root : ''}`;
+  const privText = info.private === null ? ''
+    : info.private ? '私有仓库（仅 Worker 链接可用）'
+    : '公开仓库';
   $('repoVisibility').textContent = privText;
 }
 
@@ -545,11 +546,11 @@ function fileLinks() {
   const rev = state.commitSha;
   const worker = location.origin + '/file/' + encPath(state.current.path);
   return [
-    { title: 'GitHub Raw · 直连',   hint: 'GitHub 原始文件地址（公开仓库可用）',      url: `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${p}` },
-    { title: 'jsDelivr · 分支 CDN', hint: 'jsDelivr CDN 分支版本',                    url: `https://cdn.jsdelivr.net/gh/${owner}/${repo}@${branch}/${p}` },
-    { title: 'jsDelivr · 固定 Commit', hint: '不可变的固定 commit 版本',                url: rev ? `https://cdn.jsdelivr.net/gh/${owner}/${repo}@${rev}/${p}` : '' },
-    { title: 'Cloudflare Worker · 稳定链接', hint: 'Worker 统一代理（私有仓库唯一可用路径）', url: worker, worker: true },
-    { title: 'Cloudflare Worker · 固定 Commit', hint: 'Worker 固定版本',                 url: rev ? `${worker}?v=${rev}` : '', worker: true },
+    { title: 'GitHub 直链',   hint: '公开仓库可直接访问',   url: `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${p}` },
+    { title: 'jsDelivr · 分支 CDN', hint: '带缓存加速，更新有延迟', url: `https://cdn.jsdelivr.net/gh/${owner}/${repo}@${branch}/${p}` },
+    { title: 'jsDelivr · 固定版本', hint: '不可变的固定 commit 版本', url: rev ? `https://cdn.jsdelivr.net/gh/${owner}/${repo}@${rev}/${p}` : '' },
+    { title: 'Worker 稳定链接', hint: '统一代理，私有仓库唯一路径', url: worker, worker: true },
+    { title: 'Worker 固定版本', hint: 'Worker 固定 commit', url: rev ? `${worker}?v=${rev}` : '', worker: true },
   ];
 }
 
@@ -565,13 +566,13 @@ function renderLinks() {
 
   // 顶部提示
   if (!sha) {
-    warning.textContent = '当前是未保存的新文件：请先保存到 GitHub，再使用文件访问链接。';
+    warning.textContent = '新文件，请先保存后再复制链接。';
     warning.hidden = false;
   } else if (isPrivate) {
-    warning.textContent = '私有仓库：GitHub Raw / jsDelivr 直连不可用；Worker 代理带 PAT 读取，请妥善保管 Worker 域名。';
+    warning.textContent = '私有仓库：仅 Worker 链接可用。';
     warning.hidden = false;
   } else if (!publicFiles) {
-    warning.textContent = 'PUBLIC_FILES 已关闭：Worker 代理不可用；GitHub Raw / jsDelivr 仍可访问（公开仓库）。';
+    warning.textContent = '公开文件代理已关闭。';
     warning.hidden = false;
   } else {
     warning.hidden = true;
@@ -1209,7 +1210,7 @@ window.addEventListener('hashchange', () => {
 });
 
 // ---- 启动：先显示主界面，再决定要不要跳登录 ----
-const savedToken = sessionStorage.getItem('cfhub-token');
+const savedToken = localStorage.getItem('cfhub-token') || sessionStorage.getItem('cfhub-token');
 if (savedToken) {
   state.remember = true;
   state.token = savedToken;
@@ -1217,6 +1218,7 @@ if (savedToken) {
   $('loginView').hidden = true;
   $('appView').hidden = false;
   login(savedToken).catch(e => {
+    localStorage.removeItem('cfhub-token');
     sessionStorage.removeItem('cfhub-token');
     state.token = '';
     toast('登录态已失效，请重新输入口令');
