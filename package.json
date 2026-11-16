@@ -1,13 +1,71 @@
 {
   "name": "cf-config-hub",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
+  "description": "基于 Cloudflare Workers 的 GitHub 配置文件可视化管理面板",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "setup": "node scripts/setup.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "deploy": "node scripts/doctor.mjs --quiet && wrangler deploy",
+    "test": "node --test",
+    "check": "node --check src/index.js && npm test"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
+  },
+  "cloudflare": {
+    "label": "Cloudflare Config Hub",
+    "bindings": {
+      "GITHUB_OWNER": {
+        "description": "存放配置文件的 GitHub 用户名或组织名，例如 alice"
+      },
+      "GITHUB_REPO": {
+        "description": "存放配置文件的仓库名，建议单独建一个小型仓库"
+      },
+      "GITHUB_BRANCH": {
+        "description": "要管理的分支，默认 main"
+      },
+      "ROOT_DIR": {
+        "description": "只管理仓库内的某个子目录（如 configs）；留空表示管理整个仓库"
+      },
+      "PUBLIC_FILES": {
+        "description": "是否开启公开文件代理 /file/。仅公开仓库有效（代理不携带令牌）；私有仓库请填 false"
+      },
+      "CACHE_TTL": {
+        "description": "公开代理对分支链接的缓存时间（秒），默认 60"
+      },
+      "GITHUB_TOKEN": {
+        "description": "GitHub fine-grained PAT：仅授权目标仓库的 Contents: Read and write。只保存在 Worker 后端"
+      },
+      "ADMIN_TOKEN": {
+        "description": "登录管理面板的口令，请使用 32 位以上的随机字符串"
+      },
+      "READONLY_TOKEN": {
+        "description": "（可选）只读口令：可浏览、搜索、导出，但不能修改任何内容"
+      },
+      "USERS": {
+        "description": "（可选）多人协作口令，逗号分隔的 name:rw|ro:token，例如 alice:rw:xxx,bob:ro:yyy；提交说明会附带 Edited-by 署名"
+      },
+      "LINK_SECRET": {
+        "description": "（推荐）令牌链接的签名密钥，建议 32 位以上随机字符串；未设置时由 ADMIN_TOKEN 派生（改口令会让已发出的链接失效）"
+      },
+      "DIRECT_PATHS": {
+        "description": "（可选）访问规则的初始值/兜底：逗号分隔的「规则:模式」（direct 免令牌直链、token 仅令牌、deny 禁止）。KV 里保存了规则后以 KV 为准，推荐直接在页面「管理访问规则」里编辑"
+      },
+      "LINK_VERSION_TTL": {
+        "description": "（可选）链接版本表的缓存秒数，默认 30；撤销链接最长这么久后在全球生效，调小会增加对 GitHub 的读取"
+      },
+      "CONFIG_KV": {
+        "description": "Workers KV：保存文件访问规则；部署时会自动创建并绑定"
+      },
+      "ACCESS_CACHE_TTL": {
+        "description": "（可选）访问规则在 Worker 内存中的缓存秒数，默认 10（KV 自身还有最长约 60 秒的全球传播延迟）"
+      }
+    }
   }
 }
