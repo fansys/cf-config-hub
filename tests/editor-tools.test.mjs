@@ -1,8 +1,8 @@
 /** 差异算法、规则校验、去重与安全排序。 */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { collapse, diffLines, diffStats } from '../public/js/diff.js';
-import { collectIssues, dedupe, parse, serialize, sortRuns, validateRule, validateRuleset } from '../public/js/formats/index.js';
+import { collapse, diffLines, diffStats } from '../shared/diff.js';
+import { collectIssues, dedupe, parse, serialize, sortRuns, validateRule, validateRuleset } from '../shared/formats/index.js';
 
 const apply = ops => ({
   a: ops.filter(o => o.type !== 'add').map(o => o.text).join('\n'),

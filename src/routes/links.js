@@ -3,6 +3,7 @@ import { loadRules } from '../lib/accessstore.js';
 import { readJsonBody } from '../github.js';
 import { resolveAccess } from '../lib/access.js';
 import { HttpError, json } from '../lib/http.js';
+import { clearIssued, listIssued, rememberIssued } from '../lib/issuedlinks.js';
 import { effectiveVersion, bumpVersions, readRegistry } from '../lib/linkversion.js';
 import { inspectToken, makeToken, minutesToMs, parseToken } from '../lib/linktoken.js';
 import { scopedPath } from '../lib/paths.js';
@@ -16,7 +17,7 @@ const registryCfg = c => ({ ...c, branch: c.defaults.branch });
 const branchKey = c => (c.branch === c.defaults.branch ? '' : c.branch);
 
 /** POST /api/links { paths:[文件路径], expiresIn?: 秒（省略 = 永久；60 秒 – 365 天） } */
-export async function createLinks(env, c, req) {
+export async function createLinks(env, c, req, user) {
   const body = await readJsonBody(req);
   const paths = [...new Set(Array.isArray(body.paths) ? body.paths : [])];
   if (!paths.length) throw new HttpError(400, '请指定至少一个文件');
@@ -34,15 +35,24 @@ export async function createLinks(env, c, req) {
     if (!Number.isFinite(ttl) || ttl < 60 || ttl > MAX_TTL) throw new HttpError(400, '有效期应在 1 分钟到 365 天之间；永久有效请留空');
     expiresAtMs = Date.now() + Math.floor(ttl) * 1000;
   }
-  const { data } = await readRegistry(env, registryCfg(c));
+  const reg = registryCfg(c);
+  const branch = branchKey(c);
+  let { data } = await readRegistry(env, reg, { fresh: true });
+  const stale = [];
+  for (const path of paths) {
+    if ((await listIssued(env, c, branch, path, data)).length) stale.push(path);
+  }
+  for (const path of stale) data = await bumpVersions(env, reg, { path, branch }, user);
   const links = [];
   for (const path of paths) {
-    const version = effectiveVersion(data, path, branchKey(c));
+    const version = effectiveVersion(data, path, branch);
     const token = await makeToken(env, c, path, { expiresAtMs, version });
     links.push({ path, token, version });
   }
   const minutes = parseToken(links[0].token).minutes;
-  return json({ links, branch: branchKey(c), expiresAt: minutes ? minutesToMs(minutes) : null });
+  const expiresAt = minutes ? minutesToMs(minutes) : null;
+  try { await rememberIssued(env, c, branch, links.map(link => ({ ...link, expiresAt }))); } catch { /* 记住失败不影响本次签发 */ }
+  return json({ links, branch: branchKey(c), expiresAt });
 }
 
 /** POST /api/links/revoke { path } | { all: true }：提升版本号，旧链接立即（≤缓存时间）失效。 */
@@ -50,7 +60,17 @@ export async function revokeLinks(env, c, req, user) {
   const body = await readJsonBody(req);
   if (!body.all) scopedPath(c, body.path);
   const next = await bumpVersions(env, registryCfg(c), body.all ? { all: true } : { path: body.path, branch: branchKey(c) }, user);
+  try { await clearIssued(env, c, branchKey(c), body.all ? '' : body.path); } catch { /* 清记录失败不影响撤销 */ }
   return json({ global: next.global, version: body.all ? null : effectiveVersion(next, body.path, branchKey(c)) });
+}
+
+/** GET /api/links/issued?path=…：回显该文件仍有效的已保存令牌。 */
+export async function issuedLinks(env, c, url) {
+  const path = url.searchParams.get('path') || '';
+  scopedPath(c, path);
+  const { data } = await readRegistry(env, registryCfg(c));
+  const links = await listIssued(env, c, branchKey(c), path, data, { prefix: url.searchParams.get('prefix') === '1' });
+  return json({ path, links });
 }
 
 /** GET /api/links/versions：版本表（供界面显示当前版本）。 */

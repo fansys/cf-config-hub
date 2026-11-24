@@ -6,7 +6,7 @@
 
 一个适合维护 YAML/JSON/TXT/Clash/QuantumultX 规则列表等配置文件的轻量级 GitHub 文件管理面板。
 
-- GitHub 仓库/分支/子目录管理；文件树、搜索、在线 UTF-8 编辑、下载、新建（含在指定目录下新建）、上传、删除、文件/目录重命名与移动、整目录删除；多文件/拖拽上传；保存前差异预览与提交历史（可对比、载入旧版本）；可视化编辑器的搜索、去重、安全排序、链接导入与规则校验提示；Clash / QuantumultX / Shadowrocket 三种规则互转；复制文件；登录过期时原地重新登录（保留未保存的编辑）；JSON/YAML/TOML/INI 实时语法校验与错误定位、JSON 格式化/压缩、JSON↔YAML↔TOML 互转；.env 可视化编辑（敏感值遮罩）；Markdown 预览；语法高亮视图可直接编辑；新建文件模板；页面内切换分支并可新建分支，其它分支也可设置公开链接；多口令与只读口令、提交署名与操作记录；保存前敏感信息扫描；全库搜索/替换（原子提交）；整库 zip 导出与 zip 导入（先预览差异）。
+- GitHub 仓库/分支/子目录管理；文件树、搜索、在线 UTF-8 编辑、下载、新建（含在指定目录下新建）、上传、删除、文件/目录重命名与移动、整目录删除；多文件/拖拽上传；保存前差异预览与提交历史（可对比、载入旧版本）；可视化编辑器的搜索、去重、安全排序、链接导入与规则校验提示；Clash / QuantumultX / Shadowrocket / Loon 四种规则互转；复制文件；登录过期时原地重新登录（保留未保存的编辑）；JSON/YAML/TOML/INI 实时语法校验与错误定位、JSON 格式化/压缩、JSON↔YAML↔TOML 互转；.env 可视化编辑（敏感值遮罩）；Markdown 预览；语法高亮视图可直接编辑；新建文件模板；页面内切换分支并可新建分支，其它分支也可设置公开链接；多口令与只读口令、提交署名与操作记录；保存前敏感信息扫描；全库搜索/替换（原子提交）；整库 zip 导出与 zip 导入（先预览差异）。
 - 所有修改通过 GitHub REST API 写入仓库，并生成 Commit；更新/删除带文件 SHA，避免盲目覆盖。
 - 生成 GitHub Raw 直连、jsDelivr 分支 CDN、jsDelivr Commit 固定版本、Worker 代理和 Worker 固定版本链接。
 - 可粘贴本仓库的 GitHub `blob` / Raw / jsDelivr 分支 / Worker 链接，自动定位到文件。
@@ -77,12 +77,17 @@ npx wrangler secret put ADMIN_TOKEN
 ### 本地开发
 
 ```bash
-cp .dev.vars.example .dev.vars   # 填写变量与测试用的 GITHUB_TOKEN、ADMIN_TOKEN
+cp .dev.vars.example .dev.vars           # 本地开发环境变量（npm run dev 使用）
+cp .dev.vars.example .dev.vars.preview   # （可选）本地 preview 独立环境变量（npm run preview / npm run dev:preview 使用）
 npm install
-npm run dev
+npm run dev          # Vite 5173 + wrangler 8787（读取 .dev.vars）。页面打开 http://127.0.0.1:5173
+npm run dev:preview  # Vite 5173 + wrangler 8787（优先读取 .dev.vars.preview，未创建则回退 .dev.vars）
+npm run preview      # 构建前端并用 wrangler dev --env preview 本地预览构建产物
 ```
 
-`.dev.vars` 已被 `.gitignore` 忽略。
+前端需要构建后才能部署：`npm run build` 产出 `dist/client`，`npm run deploy` 会先构建再通过 `wrangler deploy --keep-vars` 发布（`wrangler.toml` 顶层也配置了 `keep_vars = true`，绝不覆盖生产环境变量）。一键部署的 Build command 用 `npm run build`，Deploy command 用 `npx wrangler deploy --keep-vars`。
+
+`.dev.vars` 与 `.dev.vars.*`（含 `.dev.vars.preview`）均已被 `.gitignore` 忽略。
 
 ### 自定义域名与访问保护
 
@@ -145,7 +150,7 @@ Cloudflare Dashboard → Workers & Pages → Worker → Settings → Domains & R
 
 - **白名单语义**：一旦配置了任何规则，没有命中 `direct` / `token` 的文件就**不能**凭令牌访问，也**不能**为它们生成链接（接口返回 403 并给出建议的规则）。规则变更后，已发出的令牌对未开放文件立即失效，不需要撤销。
 - **完全不配置**：保持宽松——令牌可访问任意文件，没有免令牌直链。已经在用 `DIRECT_PATHS=规则` 旧写法的部署，其规则等价于 `规则:direct`；但请注意此时令牌访问也只对命中规则的文件开放，需要的话加一条 `**:token`。
-- **直接在文件 / 目录上设置**：文件树里每个文件和目录右侧都有 ⚙（鼠标悬停显示），编辑器「更多 ▾ → 访问设置」也能打开。弹窗里选「继承上级 / 免令牌直链 / 仅令牌访问 / 禁止访问」，会实时预览保存后的结果（目录会统计其中各种访问方式的文件数），保存时只改这一条规则，其它规则不动；选「继承上级」即删除这条规则。文件树里只给**不能直链**的项显示角标：需要令牌访问显示分享图标 🔗，未开放（没命中任何规则）显示 🔒，禁止显示 ⛔；可以直链的、以及公开仓库里的文件不显示。
+- **直接在文件 / 目录上设置**：文件树里每个文件和目录右侧都有 ⚙（鼠标悬停显示），编辑器「更多 ▾ → 访问设置」也能打开。弹窗里选「继承上级 / 免令牌直链 / 仅令牌访问 / 禁止访问」，会实时预览保存后的结果（目录会统计其中各种访问方式的文件数），保存时只改这一条规则，其它规则不动；选「继承上级」即删除这条规则。文件树角标：不能直接访问的文件显示 🔒，规则允许令牌访问的显示 🔗，能直接访问的不显示。公开仓库不显示角标。没配规则时文件显示 🔒，目录本身不显示。
 - 「获取文件链接」弹窗顶部显示该文件当前的访问策略和命中的规则；批量生成链接时会自动跳过未开放的文件。顶部「更多 ▾ → 文件访问规则」可以查看并批量编辑全部规则。
 - 免令牌直链等于有意公开这些文件，请只对确实可以公开的内容使用 `direct`。
 
@@ -156,8 +161,9 @@ Cloudflare Dashboard → Workers & Pages → Worker → Settings → Domains & R
 | `Clash/` | Clash 规则列表（`.ini` 为订阅增强） | `DOMAIN-SUFFIX,example.com,Proxy` |
 | `QuantumultX/`（也识别 `qx/`） | QuantumultX 规则列表 | `HOST-SUFFIX,example.com,Proxy` |
 | `Shadowrocket/`（目录名固定） | Shadowrocket 规则列表 | `DOMAIN-SUFFIX,example.com,PROXY` |
+| `Loon/`（目录名固定） | Loon 规则列表 | `DOMAIN-SUFFIX,example.com,PROXY` |
 
-可视化面板「更多 ▾ → 转为 … 规则」可在三种格式间两两互转，结果作为新文件打开（默认路径把目录换成目标格式的固定目录名 `Clash` / `QuantumultX` / `Shadowrocket`），保存后才提交，原文件不动：
+可视化面板「更多 ▾ → 转为 … 规则」可在四种格式间两两互转，结果作为新文件打开（默认路径把目录换成目标格式的固定目录名 `Clash` / `QuantumultX` / `Shadowrocket` / `Loon`），保存后才提交，原文件不动：
 
 - 类型自动对应（如 `DOMAIN-SUFFIX` ↔ `HOST-SUFFIX`，`MATCH` ↔ `FINAL`，`SRC-IP-CIDR` ↔ `SRC-IP`），策略名换成目标写法（`Proxy` / `PROXY`、`Direct` / `DIRECT`、`Reject` / `REJECT`），`no-resolve` 等附加选项、注释、空行、换行符都会保留。
 - 目标格式不支持的规则（如 Clash 没有 `USER-AGENT`、QuantumultX 没有 `PROCESS-NAME`、Shadowrocket 没有 `DOMAIN-REGEX`）不会被丢弃，而是保留为 `# [未转换] 原文` 的注释行，并在提示里统计。
@@ -258,30 +264,16 @@ npm test
 ## 9. 项目结构
 
 ```
-src/
-  index.js          Worker 入口与路由分发
-  config.js         环境变量读取与校验、常量
-  auth.js           口令校验（摘要后恒定时间比较）+ 失败限流
-  github.js         GitHub API 封装与请求体校验
-  routes/api.js     /api/* 路由与鉴权分发
-  routes/commit.js  多文件原子提交   routes/repos.js  仓库/分支
-  routes/rename.js  重命名/删目录    routes/export.js zip 导出
-  routes/file.js    /file/* 公开代理
-  lib/              http、路径校验、MIME 工具
-public/
-  index.html  style.css
-  js/main.js        入口：登录、路由、事件
-  js/api.js state.js util.js highlight.js
-  js/formats/       Clash/QX/ini/.env 解析器、转换、校验（无 DOM 依赖，可在 Node 测试）
-  js/lint.js        JSON/YAML/TOML/INI 校验与互转   js/secrets.js 敏感信息扫描
-  js/searchlib.js   搜索替换  js/markdown.js 预览  js/zip.js zip 读写  js/templates.js 模板
-  vendor/           js-yaml、smol-toml（已随仓库提供，按需加载，见同目录 LICENSE）
-  js/ui/            文件树、编辑器、链接面板、可视化面板、拖拽
+src/                Worker 入口、鉴权、GitHub API、公开代理
+shared/             无 DOM 的解析、diff、lint、zip、markdown（Node 测试直接 import）
+client/             Vue 3 + Vite 管理界面
+  index.html        入口；head 里的 /boot.js 必须是阻塞经典脚本
+  src/features/     登录、文件树、CodeMirror、可视化、链接与搜索
 scripts/            setup.mjs（部署向导）、doctor.mjs（自检）、lib.mjs
 tests/              node:test 测试
 ```
 
-前端为原生 ES Module，无需构建；登录口令默认只保存在当前标签页（sessionStorage），勾选"保持登录"才写入 localStorage。
+管理界面用 Vue 3、Vite、Tailwind CSS 和 Reka UI。登录口令默认只保存在当前标签页（sessionStorage），勾选「保持登录」才写入 localStorage。`npm test` 不启动浏览器；发布前要先 `npm run build`。
 
 ## 参考文档
 

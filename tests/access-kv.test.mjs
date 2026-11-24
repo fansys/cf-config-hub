@@ -17,12 +17,13 @@ const kv = {
     return v === undefined ? null : opts?.type === 'json' ? JSON.parse(v) : v;
   },
   async put(key, value) { store.set(key, value); },
+  async delete(key) { store.delete(key); },
 };
 globalThis.caches = { default: { match: async () => undefined, put: async () => {} } };
 globalThis.fetch = async (resource, init = {}) => {
   const url = String(resource);
   calls.push({ url, headers: init.headers || {} });
-  if (url.includes('.cfhub-links.json')) return Response.json({ message: 'Not Found' }, { status: 404 });
+  if (url.includes('.cfhub-links.json')) return init.method === 'PUT' ? Response.json({ content: { sha: 's1' } }, { status: 200 }) : Response.json({ message: 'Not Found' }, { status: 404 });
   if (url.includes('/contents/clash/a.list')) return new Response('DOMAIN,a.com\n', { headers: { 'content-type': 'text/plain' } });
   if (url.startsWith('https://raw.githubusercontent.com/')) return new Response('public', { status: 200 });
   return Response.json({ message: 'Not Found' }, { status: 404 });
@@ -99,11 +100,12 @@ test('规则在 KV 中即时影响访问：直链、令牌签发与访问', asyn
   assert.ok(calls.every(c => !c.url.includes('api.github.com')), 'deny：不用 PAT');
 
   const issue = paths => call('/api/links', { method: 'POST', body: { paths } });
-  assert.equal((await issue(['clash/a.list'])).status, 200);
+  const issuedRes = await issue(['clash/a.list']);
+  assert.equal(issuedRes.status, 200);
   assert.equal((await issue(['clash/secret/k.list'])).status, 403);
   assert.equal((await issue(['elsewhere/x'])).status, 403);
 
-  const { links } = await (await issue(['clash/a.list'])).json();
+  const { links } = await issuedRes.json();
   assert.equal((await call(`/t/${links[0].token}/clash/a.list`, { auth: '' })).status, 200);
   // 改规则收紧后，已发出的令牌立即对该文件失效
   await put([{ pattern: 'docs/', mode: 'token' }]);

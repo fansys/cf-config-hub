@@ -56,11 +56,17 @@ function better(a, b) {
   return MODE_RANK[a.mode] > MODE_RANK[b.mode];
 }
 
+/** 目录规则可以写成 `dir/`，匹配时与 `dir/**` 相同，覆盖该目录下的文件。 */
+const rulePattern = pattern => (pattern.endsWith('/') ? `${pattern}**` : pattern);
+
 /** @returns {{ mode: 'open'|'direct'|'token'|'deny'|'none', direct: boolean, token: boolean, rule: object|null }} */
 export function resolveAccess(rules, path) {
-  if (!rules.length) return { mode: 'open', direct: false, token: true, rule: null };
+  if (!rules?.length) return { mode: 'open', direct: false, token: true, rule: null };
   let best = null;
-  for (const r of rules) if (globToRegExp(r.pattern).test(path) && (!best || better(r, best))) best = r;
+  for (const r of rules) {
+    const pattern = rulePattern(r.pattern);
+    if (globToRegExp(pattern).test(path) && (!best || better({ ...r, pattern }, best))) best = { ...r, pattern };
+  }
   if (!best) return { mode: 'none', direct: false, token: false, rule: null };
   return { mode: best.mode, direct: best.mode === 'direct', token: best.mode !== 'deny', rule: best };
 }

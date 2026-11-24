@@ -16,11 +16,32 @@ export async function listBranches(env, c, url) {
     throw new HttpError(403, '不允许查看其它仓库，只能切换分支');
   }
   const base = `/repos/${enc(c.owner)}/${enc(c.repo)}`;
-  const [info, list] = await Promise.all([gh(env, base), gh(env, `${base}/branches?per_page=100`)]);
-  return json({
-    defaultBranch: info.default_branch,
-    branches: (Array.isArray(list) ? list : []).map(b => ({ name: b.name, protected: !!b.protected })),
-  });
+  const [infoResult, listResult] = await Promise.allSettled([
+    gh(env, base),
+    gh(env, `${base}/branches?per_page=100`),
+  ]);
+  const defaultBranch = (infoResult.status === 'fulfilled' && infoResult.value?.default_branch) || c.defaultBranch || c.branch;
+  let branches = [];
+  if (listResult.status === 'fulfilled' && Array.isArray(listResult.value)) {
+    branches = listResult.value.map(b => ({ name: b.name, protected: !!b.protected }));
+  } else {
+    // 兜底：若 /branches 被限流或权限不足，尝试通过 git/matching-refs/heads 获取分支名
+    try {
+      const refs = await gh(env, `${base}/git/matching-refs/heads/`);
+      if (Array.isArray(refs)) {
+        branches = refs
+          .filter(r => typeof r.ref === 'string' && r.ref.startsWith('refs/heads/'))
+          .map(r => ({ name: r.ref.slice('refs/heads/'.length), protected: false }));
+      }
+    } catch { /* 继续使用已知分支兜底 */ }
+  }
+  // 确保默认分支与当前生效分支始终在列表中
+  for (const known of [defaultBranch, c.branch]) {
+    if (known && !branches.some(b => b.name === known)) {
+      branches.unshift({ name: known, protected: false });
+    }
+  }
+  return json({ defaultBranch, branches });
 }
 
 /** POST /api/branch { name, from? }：基于某分支创建新分支。 */

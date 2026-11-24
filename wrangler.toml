@@ -1,19 +1,26 @@
 name = "config-hub"
 main = "src/index.js"
 compatibility_date = "2026-11-13"
+workers_dev = true
+# ─── 环境变量不写在这里（顶层 keep_vars 必须在所有 [section] 之前）─────────
+# 部署（npm run deploy / wrangler deploy / git push 触发的构建）不会修改或删除你在
+# Cloudflare 控制台配置的任何生产变量和密钥：
+#   Workers & Pages → 本 Worker → Settings → Variables and Secrets
+# 需要的变量：GITHUB_OWNER、GITHUB_REPO、GITHUB_BRANCH、ROOT_DIR、PUBLIC_FILES、CACHE_TTL
+# 需要的密钥：GITHUB_TOKEN、ADMIN_TOKEN
+# 本地开发默认读取 .dev.vars；本地 preview 优先读取 .dev.vars.preview（不存在则回退 .dev.vars）。
+keep_vars = true
+
+[observability]
+enabled = true
 
 [assets]
-directory = "./public"
-# 静态管理界面直接由 Cloudflare 静态资产分发，API 和 /file 路径由 Worker 处理。
+directory = "./dist/client"
+# /api/*、/file/*、/t/*（令牌链接）始终先由 Worker 处理，其余路径由静态资源提供前端页面。
+run_worker_first = ["/api/*", "/file/*", "/t/*"]
 
-[vars]
-# 请复制此文件为 wrangler.dev.toml 或在本地 .dev.vars 中覆盖。
-# 敏感信息（仓库名、Token）请勿提交到公共仓库。
-GITHUB_OWNER = "YOUR_GITHUB_OWNER"
-GITHUB_REPO = "YOUR_GITHUB_REPO"
-GITHUB_BRANCH = "main"
-ROOT_DIR = ""
-# 公开仓库设为 true；私有仓库设为 false（Worker 代理会带 PAT）。
-PUBLIC_FILES = "true"
-# Worker 可变化分支链接缓存时间（秒）。
-CACHE_TTL = "60"
+# ─── KV：保存"文件访问规则"（免令牌直链 / 仅令牌 / 禁止）──────────────────
+# 不写 id：新版 wrangler 与"一键部署"会在首次部署时自动创建并绑定。
+# 若你的 wrangler 不支持自动创建：npx wrangler kv namespace create CONFIG_KV，再把返回的 id 填到下面。
+[[kv_namespaces]]
+binding = "CONFIG_KV"

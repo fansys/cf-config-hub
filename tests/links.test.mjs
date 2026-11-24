@@ -7,6 +7,7 @@ import worker from '../src/index.js';
 import { globToRegExp, matchAny, normalizePatterns } from '../src/lib/glob.js';
 import { _clearVersionCache } from '../src/lib/linkversion.js';
 import { EPOCH_MS, inspectToken, linkHex, makeToken, minutesToMs, parseToken, toExpiryMinutes, verifyToken } from '../src/lib/linktoken.js';
+import { formatTokenExpiry, tokenExpiry } from '../shared/tokenexpiry.js';
 import { linkFailures } from '../src/routes/file.js';
 
 globalThis.crypto ||= webcrypto;
@@ -78,6 +79,10 @@ test('令牌格式：10 位 hex + 6 位分钟数，共 16 个字符', async () =
   assert.deepEqual(parseToken(t), { hex: t.slice(0, 10), minutes: 90 });
   const forever = await makeToken(env, cfg, 'a', { version: 1 });
   assert.equal(forever.slice(-6), '000000', '永久 = 000000');
+  assert.equal(tokenExpiry(t).expiresAt, minutesToMs(90));
+  assert.equal(tokenExpiry(forever).permanent, true);
+  assert.match(formatTokenExpiry(t, EPOCH_MS), /^到期 /);
+  assert.equal(formatTokenExpiry(forever), '永久有效');
   for (const bad of ['', 'x', '1234567890', `${'a'.repeat(10)}12345`, `${'a'.repeat(10)}1234567`, `${'g'.repeat(10)}000001`, `${'A'.repeat(10)}000001`]) assert.equal(parseToken(bad), null, bad);
   assert.equal(toExpiryMinutes(EPOCH_MS + 60000 * 5 + 1), 6, '向上取整，不会比期望的到期时间更早');
   assert.equal(minutesToMs(1), EPOCH_MS + 60000);
@@ -264,10 +269,10 @@ test('DIRECT_PATHS：命中规则的私有文件免令牌直链，其余仍不�
 });
 
 test('前端与服务端的通配语义一致；令牌链接可被"链接解析"识别', async () => {
-  const client = await import('../public/js/glob.js');
+  const client = await import('../shared/glob.js');
   const cases = [['clash/*.list', 'clash/a.list'], ['clash/*.list', 'clash/x/a.list'], ['**', 'a/b/c'], ['a/**/b', 'a/b'], ['a/**/b', 'a/x/y/b'], ['a?c', 'abc'], ['a.b', 'axb']];
   for (const [p, s] of cases) assert.equal(client.globToRegExp(p).test(s), globToRegExp(p).test(s), `${p} vs ${s}`);
-  const { extractPathFromLink } = await import('../public/js/ui/links.js');
+  const { extractPathFromLink } = await import('../shared/linkpath.js');
   const info = { owner: 'a', repo: 'b', branch: 'main', root: 'configs' };
   assert.equal(extractPathFromLink('https://hub.example.com/t/ab12cd34ef000000/clash/a.list', info, 'https://hub.example.com'), 'clash/a.list');
   assert.equal(extractPathFromLink('https://hub.example.com/file/clash/a.list?token=x', info, 'https://hub.example.com'), 'clash/a.list');
@@ -340,7 +345,7 @@ test('没有任何规则时保持宽松：令牌可访问任意文件；加 **:t
 
 test('前端访问策略判定与服务端一致', async () => {
   const server = await import('../src/lib/access.js');
-  const client = await import('../public/js/access.js');
+  const client = await import('../shared/access.js');
   const rules = server.parseAccessRules('a/:direct, a/x.txt:deny, b/*.list:token, c.txt');
   const wire = rules.map(({ pattern, mode }) => ({ pattern, mode })); // /api/context 返回的形状
   for (const p of ['a/1', 'a/x.txt', 'a/d/2', 'b/k.list', 'b/s/k.list', 'c.txt', 'z']) {
@@ -348,6 +353,13 @@ test('前端访问策略判定与服务端一致', async () => {
     assert.deepEqual([b.mode, b.direct, b.token], [a.mode, a.direct, a.token], p);
   }
   assert.equal(client.resolveAccess([], 'x').mode, 'open');
+  assert.equal(client.accessBadge(client.resolveAccess([], 'x')), 'lock');
+  assert.equal(client.accessBadge(client.resolveAccess(wire, 'c.txt')), 'eye');
+  assert.equal(client.accessBadge(client.resolveAccess(wire, 'b/k.list')), 'share');
+  assert.equal(client.accessBadge(client.resolveAccess(wire, 'a/x.txt')), 'lock');
+  assert.equal(client.accessBadge(client.resolveAccess(wire, 'z')), 'lock');
+  assert.equal(client.resolveAccess([{ pattern: 'docs/', mode: 'token' }], 'docs/a/b.list').token, true, '目录规则 dir/ 覆盖其中的文件');
+  assert.equal(server.resolveAccess([{ pattern: 'docs/', mode: 'token' }], 'docs/a/b.list').token, true);
   assert.deepEqual(client.ruleSnippets('clash/a.list').map(x => x.text), ['clash/a.list:direct', 'clash/a.list:token', 'clash/:direct', 'clash/:token']);
   assert.equal(client.ruleSnippets('root.txt')[2].text, '**:direct');
 });
@@ -480,4 +492,31 @@ test('其它分支在界面上设置规则后，直链与令牌按该分支的�
   calls = [];
   await call('/file/clash/a.list', { e: kvEnv });
   assert.ok(calls.every(c => !c.url.includes('api.github.com')), '默认分支没有这条规则');
+});
+
+test('已生成的令牌写入 KV，再次打开可以回显；撤销后不再返回', async () => {
+  const kvStore = new Map();
+  const kv = {
+    get: async (k, opts) => {
+      if (!kvStore.has(k)) return null;
+      const raw = kvStore.get(k);
+      return opts?.type === 'json' ? JSON.parse(raw) : raw;
+    },
+    put: async (k, v) => { kvStore.set(k, v); },
+    delete: async k => { kvStore.delete(k); },
+  };
+  const e = { ...env, CONFIG_KV: kv };
+  const made = await mint({ paths: ['clash/a.list'], expiresIn: 86400 }, e);
+  assert.equal(made.links.length, 1);
+  const again = await (await call('/api/links/issued?path=' + encodeURIComponent('clash/a.list'), { auth: 'admin-secret', e })).json();
+  assert.equal(again.links[0].token, made.links[0].token);
+  const second = await mint({ paths: ['clash/a.list'], expiresIn: 86400 }, e);
+  assert.notEqual(second.links[0].token, made.links[0].token);
+  const listed = await (await call('/api/links/issued?path=' + encodeURIComponent('clash/a.list'), { auth: 'admin-secret', e })).json();
+  assert.deepEqual(listed.links.map(row => row.token), [second.links[0].token]);
+  assert.equal((await call(`/t/${made.links[0].token}/clash/a.list`, { e })).status, 401);
+  assert.equal((await call(`/t/${second.links[0].token}/clash/a.list`, { e })).status, 200);
+  await call('/api/links/revoke', { method: 'POST', auth: 'admin-secret', body: { path: 'clash/a.list' }, e });
+  const after = await (await call('/api/links/issued?path=' + encodeURIComponent('clash/a.list'), { auth: 'admin-secret', e })).json();
+  assert.deepEqual(after.links, []);
 });

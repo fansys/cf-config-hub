@@ -24,10 +24,20 @@ export const log = {
 // 部署脚本绝不改写 wrangler.toml 里的变量（它已不含 [vars]）；线上变量只在 Cloudflare 控制台维护。
 
 export const DEV_VARS = path.join(ROOT, '.dev.vars');
+export const PREVIEW_DEV_VARS = path.join(ROOT, '.dev.vars.preview');
 export const VAR_KEYS = ['GITHUB_OWNER', 'GITHUB_REPO', 'GITHUB_BRANCH', 'ROOT_DIR', 'PUBLIC_FILES', 'CACHE_TTL'];
 export const SECRET_KEYS = ['GITHUB_TOKEN', 'ADMIN_TOKEN'];
 
 export const readToml = () => readFileSync(WRANGLER_TOML, 'utf8');
+
+/** 根据环境名解析对应的本地变量文件（例如 env='preview' 时优先读 .dev.vars.preview，不存在则回退 .dev.vars）。 */
+export function resolveDevVarsFile(envName = '') {
+  if (envName) {
+    const candidate = path.join(ROOT, `.dev.vars.${envName}`);
+    if (existsSync(candidate)) return candidate;
+  }
+  return DEV_VARS;
+}
 
 export function parseDevVars(file = DEV_VARS) {
   if (!existsSync(file)) return {};
@@ -39,7 +49,7 @@ export function parseDevVars(file = DEV_VARS) {
   return out;
 }
 
-/** 本地可见的变量（用于自检和首次部署）：环境变量优先，其次 .dev.vars。 */
+/** 本地可见的变量（用于自检和首次部署）：环境变量优先，其次 .dev.vars（或指定环境的 .dev.vars.<env>）。 */
 export function readVars(dev = parseDevVars(), env = process.env) {
   return Object.fromEntries(VAR_KEYS.map(k => [k, env[k] || dev[k] || '']));
 }

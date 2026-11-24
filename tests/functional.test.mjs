@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { cleanPath } from '../src/lib/paths.js';
 import { planDeleteDir } from '../src/routes/rename.js';
-import { applyEol, detectEol, isValidPath, toLF } from '../public/js/util.js';
+import { applyEol, detectEol, isValidPath, toLF } from '../shared/text.js';
 
 const blob = path => ({ type: 'blob', mode: '100644', path, sha: 'x' + path.length });
 const status = fn => { try { fn(); return 200; } catch (e) { return e.status; } };

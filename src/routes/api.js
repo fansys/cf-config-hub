@@ -8,7 +8,7 @@ import { REGISTRY_NAME } from '../lib/linkversion.js';
 import { scopedPath } from '../lib/paths.js';
 import { atomicCommit } from './commit.js';
 import { exportZip } from './export.js';
-import { createLinks, inspectLink, linkVersions, revokeLinks } from './links.js';
+import { createLinks, inspectLink, issuedLinks, linkVersions, revokeLinks } from './links.js';
 import { createBranch, listBranches } from './repos.js';
 import { deleteDir, renamePath } from './rename.js';
 
@@ -148,17 +148,18 @@ export async function handleApi(req, env, url) {
       const body = await readJsonBody(req);
       if (body.mode != null && !['direct', 'token', 'deny'].includes(body.mode)) throw new HttpError(400, 'mode 应为 direct / token / deny，或 null（恢复继承）');
       if (typeof body.pattern === 'string' && body.pattern.length > 0) scopedPath(c, body.pattern.replace(/\/+$/, '').replace(/\*+$/, 'x') || 'x'); // 复用路径合法性校验
-      await setRule(env, c, body.pattern, body.mode ?? null, user);
-      return json(await accessSummary(env, c, true));
+      const saved = await setRule(env, c, body.pattern, body.mode ?? null, user);
+      return json({ ...(await accessSummary(env, c, true)), ...saved });
     }
     case '/api/files': if (req.method === 'GET') return listFiles(env, c, base); break;
     case '/api/branches': if (req.method === 'GET') return listBranches(env, c, url); break;
     case '/api/branch': if (req.method === 'POST') return createBranch(env, c, req, base); break;
     case '/api/export': if (req.method === 'GET') return exportZip(env, c, base); break;
-    case '/api/links': if (req.method === 'POST') return createLinks(env, c, req); break;
+    case '/api/links': if (req.method === 'POST') return createLinks(env, c, req, user); break;
     case '/api/links/revoke': if (req.method === 'POST') return revokeLinks(env, c, req, user); break;
     case '/api/links/versions': if (req.method === 'GET') return linkVersions(env, c, url); break;
     case '/api/links/inspect': if (req.method === 'GET') return inspectLink(env, c, url); break;
+    case '/api/links/issued': if (req.method === 'GET') return issuedLinks(env, c, url); break;
     case '/api/commit': if (req.method === 'POST') return atomicCommit(env, c, req, base, user, scopedPath); break;
     case '/api/rename': if (req.method === 'POST') return renamePath(env, c, req, base, user); break;
     case '/api/dir': if (req.method === 'DELETE') return deleteDir(env, c, req, base, user); break;

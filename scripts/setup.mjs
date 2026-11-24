@@ -109,10 +109,10 @@ async function collectSecrets() {
 
 async function deploy(cfg) {
   log.step('部署 Worker');
-  // 变量通过 --var 只随本次部署写入；wrangler.toml 保持不变，keep_vars=true 保证后续部署不会清掉它们
+  // 变量通过 --var 只随本次部署写入；wrangler.toml 保持不变，keep_vars=true 与 --keep-vars 保证后续部署不会清掉它们
   const varArgs = noVars ? [] : Object.entries(cfg).filter(([, v]) => v !== '').flatMap(([k, v]) => ['--var', `${k}:${v}`]);
   if (noVars) log.info('--no-vars：不设置变量，沿用控制台里已有的值');
-  const r = await npx(['deploy', ...varArgs], { capture: true });
+  const r = await npx(['deploy', '--keep-vars', ...varArgs], { capture: true });
   if (r.code !== 0) fail('部署失败，请查看上方 wrangler 输出');
   const url = r.stdout.match(/https:\/\/[a-z0-9.-]+\.workers\.dev/i)?.[0];
   if (url) log.ok(`已部署：${url}`);

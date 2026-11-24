@@ -74,8 +74,9 @@ export async function saveRules(env, c, rawRules, user) {
   const rules = normalizeRules(rawRules);
   const record = { rules, updatedAt: Date.now(), updatedBy: user?.name || 'admin' };
   await env.CONFIG_KV.put(kvKey(c), JSON.stringify(record));
-  memory.delete(kvKey(c));
-  return { rules, source: 'kv', updatedAt: record.updatedAt, updatedBy: record.updatedBy };
+  const value = { rules, source: 'kv', updatedAt: record.updatedAt, updatedBy: record.updatedBy };
+  memory.set(kvKey(c), { at: Date.now(), value });
+  return value;
 }
 
 /**

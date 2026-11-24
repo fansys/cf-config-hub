@@ -1,8 +1,8 @@
 /** 可视化格式解析器：往返保真（解析后再序列化，未改动内容必须逐字节一致）。 */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { detectFormat, parse, serialize } from '../public/js/formats/index.js';
-import { parseProxyGroup, serializeProxyGroup } from '../public/js/formats/clash-ini.js';
+import { detectFormat, parse, serialize } from '../shared/formats/index.js';
+import { parseProxyGroup, serializeProxyGroup } from '../shared/formats/clash-ini.js';
 
 const roundTrip = (fmt, text) => serialize(parse(fmt, text));
 

@@ -2,14 +2,14 @@
 import assert from 'node:assert/strict';
 import { CompressionStream as _CS } from 'node:stream/web';
 import { test } from 'node:test';
-import { convertData, convertedName, formatJson, langOf, lint } from '../public/js/lint.js';
-import { parseInline, parseMarkdown } from '../public/js/markdown.js';
-import { buildMatcher, findInText, replaceInText, searchable } from '../public/js/searchlib.js';
-import { mask, scanSecrets } from '../public/js/secrets.js';
-import { TEMPLATES, templatesFor } from '../public/js/templates.js';
-import { gitBlobSha } from '../public/js/gitsha.js';
-import { planImport, readZip, writeZip } from '../public/js/zip.js';
-import { detectFormat, envIssues, isSensitiveKey, parse, serialize } from '../public/js/formats/index.js';
+import { convertData, convertedName, formatJson, langOf, lint } from '../shared/lint.js';
+import { parseInline, parseMarkdown } from '../shared/markdown.js';
+import { buildMatcher, findInText, replaceInText, searchable } from '../shared/searchlib.js';
+import { mask, scanSecrets } from '../shared/secrets.js';
+import { TEMPLATES, templatesFor } from '../shared/templates.js';
+import { gitBlobSha } from '../shared/gitsha.js';
+import { planImport, readZip, writeZip } from '../shared/zip.js';
+import { detectFormat, envIssues, isSensitiveKey, parse, serialize } from '../shared/formats/index.js';
 
 const enc = s => new TextEncoder().encode(s);
 

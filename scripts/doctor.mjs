@@ -7,7 +7,7 @@
  */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { ROOT, c, log, parseDevVars, readVars, validateVars } from './lib.mjs';
+import { ROOT, c, log, parseDevVars, readVars, resolveDevVarsFile, validateVars } from './lib.mjs';
 
 async function probeGitHub(vars, token) {
   const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'cf-config-hub-doctor', Authorization: `Bearer ${token}` };
@@ -22,7 +22,7 @@ async function probeGitHub(vars, token) {
   return { private: !!data.private, canPush: data.permissions?.push };
 }
 
-export async function doctor({ probe = true, quiet = false } = {}) {
+export async function doctor({ probe = true, quiet = false, envName = '' } = {}) {
   const errors = [];
   const warnings = [];
 
@@ -30,8 +30,10 @@ export async function doctor({ probe = true, quiet = false } = {}) {
   if (major < 20) errors.push(`Node.js 版本过低（${process.versions.node}），需要 20 或更高`);
   if (!existsSync(path.join(ROOT, 'node_modules', 'wrangler'))) warnings.push('尚未安装依赖，请先执行 npm install（npx 也会临时下载 wrangler，但会更慢）');
 
-  // 变量只在 Cloudflare 控制台维护，部署不会改动。这里仅校验本地能看到的值（环境变量 / .dev.vars）。
-  const vars = readVars();
+  // 变量只在 Cloudflare 控制台维护，部署不会改动。这里仅校验本地能看到的值（环境变量 / .dev.vars / .dev.vars.preview）。
+  const devFile = resolveDevVarsFile(envName);
+  const dev = parseDevVars(devFile);
+  const vars = readVars(dev);
   const localKnown = !!(vars.GITHUB_OWNER || vars.GITHUB_REPO);
   if (localKnown) {
     errors.push(...validateVars({ ...vars, GITHUB_BRANCH: vars.GITHUB_BRANCH || 'main', PUBLIC_FILES: vars.PUBLIC_FILES || 'true' }));
@@ -39,7 +41,6 @@ export async function doctor({ probe = true, quiet = false } = {}) {
     warnings.push('本地没有变量信息（.dev.vars / 环境变量），已跳过变量校验。请确认 Cloudflare 控制台已配置 GITHUB_OWNER、GITHUB_REPO 等；部署不会修改它们');
   }
 
-  const dev = parseDevVars();
   if (!errors.length && localKnown && probe && dev.GITHUB_TOKEN && !/replace_me/.test(dev.GITHUB_TOKEN)) {
     try {
       const r = await probeGitHub(vars, dev.GITHUB_TOKEN);
@@ -65,7 +66,9 @@ export async function doctor({ probe = true, quiet = false } = {}) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('doctor.mjs')) {
-  const { errors } = await doctor({ quiet: process.argv.includes('--quiet') });
+  const envIdx = process.argv.findIndex(a => a === '--env' || a === '-e');
+  const envName = envIdx >= 0 ? (process.argv[envIdx + 1] || '') : '';
+  const { errors } = await doctor({ quiet: process.argv.includes('--quiet'), envName });
   if (errors.length) {
     console.error(`\n${c.red('自检未通过')}：请修正上述问题后重试（编辑 .dev.vars、控制台变量，或运行 npm run setup）。`);
     process.exit(1);
